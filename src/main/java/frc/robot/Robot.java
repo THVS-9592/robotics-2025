@@ -45,6 +45,18 @@ public class Robot extends TimedRobot
   boolean move = false;
   boolean drive = false;
 
+  // Change the safety settings of all the motors
+  public void setSafety(boolean safety)
+  {
+    victorRightLeader.setSafetyEnabled(safety);
+    victorRightFollower.setSafetyEnabled(safety);
+
+    victorLeftLeader.setSafetyEnabled(safety);
+    victorLeftFollower.setSafetyEnabled(safety);
+
+    drivetrain.setSafetyEnabled(safety);
+  }
+
   public void robotInit() 
   {
     victorLeftLeader.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 10);
@@ -65,40 +77,22 @@ public class Robot extends TimedRobot
 
     // Safeties shouldn't on, but we will still set them to on at the start of the program
 
-    victorRightLeader.setSafetyEnabled(true);
-    victorRightFollower.setSafetyEnabled(true);
-
-    victorLeftLeader.setSafetyEnabled(true);
-    victorLeftFollower.setSafetyEnabled(true);
+    setSafety(true);
   }
 
   public void teleopInit()
   {
+    setSafety(false);
+  }
 
-    // Safeties make the robot give errors, so we turn them off
-
-    victorRightLeader.setSafetyEnabled(false);
-    victorRightFollower.setSafetyEnabled(false);
-
-    victorLeftLeader.setSafetyEnabled(false);
-    victorLeftFollower.setSafetyEnabled(false);
-
-    drivetrain.setSafetyEnabled(false);
-
-    drivetrain.arcadeDrive(controller.getLeftY(), -controller.getRightX(), true);
+public void teleopPeriodic()
+{
+  drivetrain.arcadeDrive(controller.getLeftY(), -controller.getRightX(), true);
 }
 
   public void autonomousInit()
   {
-    // Safeties make the robot give errors, so we turn them off
-
-    victorRightLeader.setSafetyEnabled(false);
-    victorRightFollower.setSafetyEnabled(false);
-
-    victorLeftLeader.setSafetyEnabled(false);
-    victorLeftFollower.setSafetyEnabled(false);
-
-    drivetrain.setSafetyEnabled(false);
+    setSafety(false);
     
     m_timer.restart();
 
