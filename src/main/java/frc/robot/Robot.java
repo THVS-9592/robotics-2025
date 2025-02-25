@@ -35,15 +35,15 @@ public class Robot extends TimedRobot
 
   // Declare motors
 
-  WPI_VictorSPX victorLeftLeader = new WPI_VictorSPX(1);
-  WPI_VictorSPX victorLeftFollower = new WPI_VictorSPX(3);
+  WPI_TalonSRX talonLeftLeader = new WPI_TalonSRX(1);
+  WPI_TalonSRX talonLeftFollower = new WPI_TalonSRX(3);
 
-  WPI_VictorSPX victorRightLeader = new WPI_VictorSPX(2);
-  WPI_VictorSPX victorRightFollower = new WPI_VictorSPX(4);
+  WPI_TalonSRX talonRightLeader = new WPI_TalonSRX(2);
+  WPI_TalonSRX talonRightFollower = new WPI_TalonSRX(4);
 
   // Declare drivetrain
 
-  DifferentialDrive drivetrain = new DifferentialDrive(victorLeftLeader, victorRightLeader);
+  DifferentialDrive drivetrain = new DifferentialDrive(talonLeftLeader, talonRightLeader);
 
   // Set variables to default
 
@@ -61,32 +61,32 @@ public class Robot extends TimedRobot
   // Change the safety settings of all the motors
   public void setSafety(boolean safety)
   {
-    victorRightLeader.setSafetyEnabled(safety);
-    victorRightFollower.setSafetyEnabled(safety);
+    talonRightLeader.setSafetyEnabled(safety);
+    talonRightFollower.setSafetyEnabled(safety);
 
-    victorLeftLeader.setSafetyEnabled(safety);
-    victorLeftFollower.setSafetyEnabled(safety);
+    talonLeftLeader.setSafetyEnabled(safety);
+    talonLeftFollower.setSafetyEnabled(safety);
 
     drivetrain.setSafetyEnabled(safety);
   }
 
   public void robotInit() 
   {
-    victorLeftLeader.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 10);
+    talonLeftLeader.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 10);
     
     controller = new XboxController(0);
-    victorLeftFollower.follow(victorLeftLeader);
-    victorRightFollower.follow(victorRightLeader);
+    talonLeftFollower.follow(talonLeftLeader);
+    talonRightFollower.follow(talonRightLeader);
 
     // Invert the right side of the drivetrain, and make sure the left is not inverted
 
-    victorLeftLeader.setInverted(false);
-    victorRightLeader.setInverted(true);
+    talonLeftLeader.setInverted(false);
+    talonRightLeader.setInverted(true);
 
     // Make the followers the same as their leaders
 
-    victorLeftFollower.setInverted(InvertType.FollowMaster);
-    victorRightFollower.setInverted(InvertType.FollowMaster);
+    talonLeftFollower.setInverted(InvertType.FollowMaster);
+    talonRightFollower.setInverted(InvertType.FollowMaster);
 
     // Safeties shouldn't on, but we will still set them to on at the start of the program
 
@@ -184,7 +184,6 @@ public void teleopPeriodic()
 
         // remember we saw this tag
         tags.add((long) detection.getId());
-
         // draw lines around the tag
         for (var i = 0; i <= 3; i++) {
           var j = (i + 1) % 4;
