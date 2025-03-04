@@ -7,6 +7,7 @@ import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
+import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
 import edu.wpi.first.apriltag.AprilTagDetection;
 import edu.wpi.first.apriltag.AprilTagDetector;
 import edu.wpi.first.apriltag.AprilTagPoseEstimator;
@@ -19,44 +20,38 @@ import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.networktables.IntegerArrayPublisher;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import com.ctre.phoenix.motorcontrol.FeedbackDevice;
 import java.util.ArrayList;
 import org.opencv.core.*;
 import org.opencv.imgproc.*;
-import com.ctre.phoenix.motorcontrol.InvertType;
 import com.ctre.phoenix.motorcontrol.can.*;
+
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.RelativeEncoder;
+import com.revrobotics.CANSparkLowLevel.MotorType;
 
 public class Robot extends TimedRobot 
 {
   // Declare controllers and timer
+  private XboxController driver;
+  private XboxController operator;
 
-  private XboxController controller;
   private final Timer m_timer = new Timer(); 
 
   // Declare motors
-
   WPI_TalonSRX talonLeftLeader = new WPI_TalonSRX(1);
-  WPI_TalonSRX talonLeftFollower = new WPI_TalonSRX(3);
+  WPI_TalonSRX talonLeftFollower = new WPI_TalonSRX(2);
 
-  WPI_TalonSRX talonRightLeader = new WPI_TalonSRX(2);
+  WPI_TalonSRX talonRightLeader = new WPI_TalonSRX(3);
   WPI_TalonSRX talonRightFollower = new WPI_TalonSRX(4);
 
+  CANSparkMax sparkElevator = new CANSparkMax(0, MotorType.kBrushless);
+  //WPI_TalonSRX talonRoller = new WPI_TalonSRX(6);
+
+  // Declare encoder
+  RelativeEncoder sparkEncoder = sparkElevator.getEncoder();
+
   // Declare drivetrain
-
   DifferentialDrive drivetrain = new DifferentialDrive(talonLeftLeader, talonRightLeader);
-
-  // Set variables to default
-
-  double kP2 = 1;
-  double kP = 0.05;
-  boolean shoot = false;
-  boolean reverse = false;
-  boolean low = false;
-  boolean restart = false;
-  boolean reversed = false;
-  boolean shooting = false;
-  boolean move = false;
-  boolean drive = false;
 
   // Change the safety settings of all the motors
   public void setSafety(boolean safety)
@@ -71,25 +66,22 @@ public class Robot extends TimedRobot
   }
 
   public void robotInit() 
-  {
-    talonLeftLeader.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 10);
-    
-    controller = new XboxController(0);
+  {    
+    driver = new XboxController(0);
+    operator = new XboxController(1);
+
     talonLeftFollower.follow(talonLeftLeader);
     talonRightFollower.follow(talonRightLeader);
 
-    // Invert the right side of the drivetrain, and make sure the left is not inverted
-
-    talonLeftLeader.setInverted(false);
-    talonRightLeader.setInverted(true);
+    // Invert the left side of the drivetrain, and make sure the right is not inverted
+    talonLeftLeader.setInverted(true);
+    talonRightLeader.setInverted(false);
 
     // Make the followers the same as their leaders
-
-    talonLeftFollower.setInverted(InvertType.FollowMaster);
-    talonRightFollower.setInverted(InvertType.FollowMaster);
+    talonLeftFollower.setInverted(false);
+    talonRightFollower.setInverted(false);
 
     // Safeties shouldn't on, but we will still set them to on at the start of the program
-
     setSafety(true);
   }
 
@@ -98,19 +90,18 @@ public class Robot extends TimedRobot
     setSafety(false);
   }
 
-public void teleopPeriodic()
-{
-  drivetrain.arcadeDrive(controller.getLeftY(), -controller.getRightX(), true);
-}
+  public void teleopPeriodic()
+  {
+    drivetrain.arcadeDrive(-driver.getLeftY(), driver.getRightX(), true);
+    sparkElevator.set(operator.getLeftY());
+    System.out.println(sparkEncoder.getPosition());
+  }
 
   public void autonomousInit()
   {
     setSafety(false);
     
     m_timer.restart();
-
-    shooting = false;
-    move = false;
   }
 
   public void autonomousPeriodic()
