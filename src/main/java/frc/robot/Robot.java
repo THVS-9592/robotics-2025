@@ -45,13 +45,17 @@ public class Robot extends TimedRobot
   WPI_TalonSRX talonRightFollower = new WPI_TalonSRX(4);
 
   CANSparkMax sparkElevator = new CANSparkMax(0, MotorType.kBrushless);
-  //WPI_TalonSRX talonRoller = new WPI_TalonSRX(6);
+  WPI_TalonSRX talonRoller = new WPI_TalonSRX(6);
+  WPI_TalonSRX talonWheels = new WPI_TalonSRX(7);
 
   // Declare encoder
   RelativeEncoder sparkEncoder = sparkElevator.getEncoder();
 
   // Declare drivetrain
   DifferentialDrive drivetrain = new DifferentialDrive(talonLeftLeader, talonRightLeader);
+
+  //Set variables
+  boolean rollerDown = false;
 
   // Change the safety settings of all the motors
   public void setSafety(boolean safety)
@@ -77,7 +81,7 @@ public class Robot extends TimedRobot
     talonLeftLeader.setInverted(true);
     talonRightLeader.setInverted(false);
 
-    // Make the followers the same as their leaders
+    // Both followers need to be false
     talonLeftFollower.setInverted(false);
     talonRightFollower.setInverted(false);
 
@@ -85,22 +89,68 @@ public class Robot extends TimedRobot
     setSafety(true);
   }
 
+  //Move the roller elevator up or down
+  public void moveRollerElevator()
+  {
+    m_timer.restart();
+    if(rollerDown == true)
+    {
+      while(m_timer.get() < 3)
+      {
+        talonRoller.set(25);
+      }
+      talonRoller.set(0);
+      rollerDown = false;
+    }
+    else
+    {
+      while(m_timer.get() < 3)
+      {
+        talonRoller.set(-25);
+      }
+      talonRoller.set(0);
+      rollerDown = true;
+    }
+  }
+
+  //Move the rollers to take a ball
+  public void turnRollers()
+  {
+    m_timer.restart();
+
+    while(m_timer.get() < 2)
+    {
+      talonWheels.set(25);
+    }
+  }
+
   public void teleopInit()
   {
+    m_timer.start();
     setSafety(false);
   }
 
   public void teleopPeriodic()
   {
-    drivetrain.arcadeDrive(-driver.getLeftY(), driver.getRightX(), true);
+    drivetrain.arcadeDrive(driver.getLeftY(), driver.getRightX(), true);
     sparkElevator.set(operator.getLeftY());
+
+    if(operator.getAButtonPressed())
+    {
+      turnRollers();
+    }
+
+    if(operator.getXButtonPressed())
+    {
+      moveRollerElevator();
+    }
+
     System.out.println(sparkEncoder.getPosition());
   }
 
   public void autonomousInit()
   {
     setSafety(false);
-    
     m_timer.restart();
   }
 
