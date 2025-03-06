@@ -44,9 +44,10 @@ public class Robot extends TimedRobot
   WPI_TalonSRX talonRightLeader = new WPI_TalonSRX(3);
   WPI_TalonSRX talonRightFollower = new WPI_TalonSRX(4);
 
-  CANSparkMax sparkElevator = new CANSparkMax(0, MotorType.kBrushless);
-  WPI_TalonSRX talonRoller = new WPI_TalonSRX(6);
-  WPI_TalonSRX talonWheels = new WPI_TalonSRX(7);
+  WPI_TalonSRX talonRollerElevator = new WPI_TalonSRX(5);
+  WPI_TalonSRX talonRollers = new WPI_TalonSRX(6);
+  CANSparkMax sparkElevator = new CANSparkMax(7, MotorType.kBrushless);
+  WPI_TalonSRX talonCoralIntake = new WPI_TalonSRX(8);
 
   // Declare encoder
   RelativeEncoder sparkEncoder = sparkElevator.getEncoder();
@@ -97,18 +98,18 @@ public class Robot extends TimedRobot
     {
       while(m_timer.get() < 3)
       {
-        talonRoller.set(25);
+        talonRollerElevator.set(25);
       }
-      talonRoller.set(0);
+      talonRollerElevator.set(0);
       rollerDown = false;
     }
     else
     {
       while(m_timer.get() < 3)
       {
-        talonRoller.set(-25);
+        talonRollerElevator.set(-25);
       }
-      talonRoller.set(0);
+      talonRollerElevator.set(0);
       rollerDown = true;
     }
   }
@@ -120,7 +121,7 @@ public class Robot extends TimedRobot
 
     while(m_timer.get() < 2)
     {
-      talonWheels.set(25);
+      talonRollers.set(25);
     }
   }
 
