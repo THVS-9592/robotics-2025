@@ -57,6 +57,7 @@ public class Robot extends TimedRobot
 
   //Set variables
   boolean rollerDown = false;
+  boolean elevatorLowered = false;
 
   // Change the safety settings of all the motors
   public void setSafety(boolean safety)
@@ -125,6 +126,29 @@ public class Robot extends TimedRobot
     }
   }
 
+  public void moveElevator()
+  {
+    m_timer.restart();
+    if(elevatorLowered == true)
+    {
+      while(m_timer.get() < 3)
+      {
+        sparkElevator.set(25);
+      }
+      sparkElevator.set(0);
+      elevatorLowered = false;
+    }
+    else
+    {
+      while(m_timer.get() < 3)
+      {
+        sparkElevator.set(-25);
+      }
+      sparkElevator.set(0);
+      elevatorLowered = true;
+    }
+  }
+
   public void teleopInit()
   {
     m_timer.start();
@@ -144,6 +168,11 @@ public class Robot extends TimedRobot
     if(operator.getXButtonPressed())
     {
       moveRollerElevator();
+    }
+
+    if(operator.getBButtonPressed())
+    {
+      moveElevator();
     }
 
     System.out.println(sparkEncoder.getPosition());
