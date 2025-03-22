@@ -3,11 +3,17 @@
 // the WPILib BSD license file in the root directory of this proj
 
 package frc.robot;
+import edu.wpi.first.wpilibj.DigitalInput;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
-import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj2.command.Commands;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.apriltag.AprilTagDetection;
 import edu.wpi.first.apriltag.AprilTagDetector;
 import edu.wpi.first.apriltag.AprilTagPoseEstimator;
@@ -15,19 +21,28 @@ import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.cscore.CvSink;
 import edu.wpi.first.cscore.CvSource;
 import edu.wpi.first.cscore.UsbCamera;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.networktables.IntegerArrayPublisher;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import java.util.ArrayList;
+
 import org.opencv.core.*;
 import org.opencv.imgproc.*;
-import com.ctre.phoenix.motorcontrol.can.*;
 
-import com.revrobotics.CANSparkMax;
+import com.ctre.phoenix.motorcontrol.FeedbackDevice;
+import com.ctre.phoenix.motorcontrol.can.*;
+import com.revrobotics.spark.SparkMax;
 import com.revrobotics.RelativeEncoder;
-import com.revrobotics.CANSparkLowLevel.MotorType;
+import com.revrobotics.spark.ClosedLoopSlot;
+import com.revrobotics.spark.SparkClosedLoopController;
+import com.revrobotics.spark.SparkBase.PersistMode;
+import com.revrobotics.spark.SparkLowLevel.MotorType;
+import com.revrobotics.spark.config.ClosedLoopConfig.FeedbackSensor;
+import com.revrobotics.spark.config.SparkMaxConfig;
+import com.revrobotics.spark.SparkBase.ResetMode;
 
 public class Robot extends TimedRobot 
 {
@@ -37,27 +52,36 @@ public class Robot extends TimedRobot
 
   private final Timer m_timer = new Timer(); 
 
+  DigitalInput limit = new DigitalInput(0);
+
   // Declare motors
   WPI_TalonSRX talonLeftLeader = new WPI_TalonSRX(1);
-  WPI_TalonSRX talonLeftFollower = new WPI_TalonSRX(2);
+  WPI_TalonSRX talonLeftFollower = new WPI_TalonSRX(3);
 
-  WPI_TalonSRX talonRightLeader = new WPI_TalonSRX(3);
+  WPI_TalonSRX talonRightLeader = new WPI_TalonSRX(2);
   WPI_TalonSRX talonRightFollower = new WPI_TalonSRX(4);
 
-  WPI_TalonSRX talonRollerElevator = new WPI_TalonSRX(5);
+  WPI_VictorSPX victorRollerElevator = new WPI_VictorSPX(0);
   WPI_TalonSRX talonRollers = new WPI_TalonSRX(6);
-  CANSparkMax sparkElevator = new CANSparkMax(7, MotorType.kBrushless);
+  SparkMax sparkElevator = new SparkMax(7, MotorType.kBrushless);
   WPI_TalonSRX talonCoralIntake = new WPI_TalonSRX(8);
+
+  SparkClosedLoopController closedLoopController = sparkElevator.getClosedLoopController();
 
   // Declare encoder
   RelativeEncoder sparkEncoder = sparkElevator.getEncoder();
-
   // Declare drivetrain
   DifferentialDrive drivetrain = new DifferentialDrive(talonLeftLeader, talonRightLeader);
 
   //Set variables
   boolean rollerDown = false;
   boolean elevatorLowered = false;
+  int setpoint;
+  boolean go = true;
+
+  UsbCamera camera = CameraServer.startAutomaticCapture();
+
+  PIDController pid = new PIDController(0.5, 0, 0);
 
   // Change the safety settings of all the motors
   public void setSafety(boolean safety)
@@ -79,114 +103,273 @@ public class Robot extends TimedRobot
     talonLeftFollower.follow(talonLeftLeader);
     talonRightFollower.follow(talonRightLeader);
 
-    // Invert the left side of the drivetrain, and make sure the right is not inverted
-    talonLeftLeader.setInverted(true);
-    talonRightLeader.setInverted(false);
+    // Invert the right side of the drivetrain, and make sure the right is not inverted
+    talonLeftLeader.setInverted(false);
+    talonRightLeader.setInverted(true);
 
-    // Both followers need to be false
-    talonLeftFollower.setInverted(false);
-    talonRightFollower.setInverted(false);
-
+    talonLeftFollower.setInverted(talonLeftLeader.getInverted());
+    talonRightFollower.setInverted(talonRightLeader.getInverted());
+    
     // Safeties shouldn't on, but we will still set them to on at the start of the program
     setSafety(true);
-  }
 
-  //Move the roller elevator up or down
-  public void moveRollerElevator()
-  {
-    m_timer.restart();
-    if(rollerDown == true)
-    {
-      while(m_timer.get() < 3)
-      {
-        talonRollerElevator.set(25);
-      }
-      talonRollerElevator.set(0);
-      rollerDown = false;
-    }
-    else
-    {
-      while(m_timer.get() < 3)
-      {
-        talonRollerElevator.set(-25);
-      }
-      talonRollerElevator.set(0);
-      rollerDown = true;
-    }
+    //Configure the encoders
+    //talonLeftLeader.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 10);
+    //talonLeftLeader.setSensorPhase(false);
+
+    //talonRightLeader.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 10);
+    //talonRightLeader.setSensorPhase(true);
+
+    SparkMaxConfig encoderConfig = new SparkMaxConfig();
+    encoderConfig.encoder
+        .positionConversionFactor(1)
+        .velocityConversionFactor(1);
+
+    encoderConfig.closedLoop
+      .feedbackSensor(FeedbackSensor.kPrimaryEncoder)
+      // Set PID values for position control. We don't need to pass a closed
+      // loop slot, as it will default to slot 0.
+      .p(0.4)
+      .i(0)
+      .d(0)
+      .outputRange(-1, 1)
+      // Set PID values for velocity control in slot 1
+      .p(0.0001, ClosedLoopSlot.kSlot1)
+      .i(0, ClosedLoopSlot.kSlot1)
+      .d(0, ClosedLoopSlot.kSlot1)
+      .velocityFF(1.0 / 5767, ClosedLoopSlot.kSlot1)
+      .outputRange(-1, 1, ClosedLoopSlot.kSlot1);
+
+    encoderConfig.closedLoop.maxMotion
+      // Set MAXMotion parameters for position control. We don't need to pass
+      // a closed loop slot, as it will default to slot 0.
+      .maxVelocity(1000)
+      .maxAcceleration(1000)
+      .allowedClosedLoopError(1)
+      // Set MAXMotion parameters for velocity control in slot 1
+      .maxAcceleration(500, ClosedLoopSlot.kSlot1)
+      .maxVelocity(6000, ClosedLoopSlot.kSlot1)
+      .allowedClosedLoopError(1, ClosedLoopSlot.kSlot1);
+
+    /*
+     * Apply the configuration to the SPARK MAX.
+     *
+     * kResetSafeParameters is used to get the SPARK MAX to a known state. This
+     * is useful in case the SPARK MAX is replaced.
+     *
+     * kPersistParameters is used to ensure the configuration is not lost when
+     * the SPARK MAX loses power. This is useful for power cycles that may occur
+     * mid-operation.
+     */
+    sparkElevator.configure(encoderConfig, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
+
+    // Initialize dashboard values
+    SmartDashboard.setDefaultNumber("Target Position", 0);
+    SmartDashboard.setDefaultNumber("Target Velocity", 0);
+    SmartDashboard.setDefaultNumber("Calculate", 0);
+    SmartDashboard.setDefaultNumber("LLeaderSpeed", 0);
+    SmartDashboard.setDefaultNumber("RLeaderSpeed", 0);
+    SmartDashboard.setDefaultNumber("LFollowSpeed", 0);
+    SmartDashboard.setDefaultNumber("RFollowSpeed", 0);
+    SmartDashboard.setDefaultNumber("Robot Position L", 0);
+    SmartDashboard.setDefaultNumber("Robot Position R", 0);
+    SmartDashboard.setDefaultBoolean("Control Mode", false);
+    SmartDashboard.setDefaultBoolean("Reset Encoder", false);
   }
 
   //Move the rollers to take a ball
-  public void turnRollers()
+  public void turnRollers(boolean out)
   {
-    m_timer.restart();
-
-    while(m_timer.get() < 2)
+    if(out == false)
     {
-      talonRollers.set(25);
-    }
-  }
-
-  public void moveElevator()
-  {
-    m_timer.restart();
-    if(elevatorLowered == true)
-    {
-      while(m_timer.get() < 3)
+      if(operator.getAButton())
       {
-        sparkElevator.set(25);
+        talonRollers.set(-1);
       }
-      sparkElevator.set(0);
-      elevatorLowered = false;
+      else
+      {
+        talonRollers.set(0);
+      }
     }
     else
     {
-      while(m_timer.get() < 3)
+      if(operator.getBButton())
       {
-        sparkElevator.set(-25);
+        talonRollers.set(1);
       }
+      else
+      {
+        talonRollers.set(0);
+      }
+    }
+  }
+
+  public void shootCoral(boolean intake)
+  {
+    talonCoralIntake.set(1);
+    talonCoralIntake.set(0);
+  }
+
+  public void moveBottom()
+  {
+    setpoint = 54;
+    while(pid.calculate(sparkEncoder.getPosition(), setpoint) > 2 || pid.calculate(sparkEncoder.getPosition(), setpoint) < -2)
+    {
+      sparkElevator.set(pid.calculate(sparkEncoder.getPosition(), setpoint));
+    }
+    setpoint = 0;
+  }
+
+  public void moveMiddle()
+  {
+    setpoint = 110;
+    if(pid.calculate(sparkEncoder.getPosition(), setpoint) > 2 || pid.calculate(sparkEncoder.getPosition(), setpoint) < -2)
+    {
+      sparkElevator.set(pid.calculate(sparkEncoder.getPosition(), setpoint));
+    }
+    else
+    {
       sparkElevator.set(0);
-      elevatorLowered = true;
+    }
+    setpoint = 0;
+  }
+
+  public void robotPeriodic() {
+    // Display encoder position and velocity
+    SmartDashboard.putNumber("Actual Position", sparkEncoder.getPosition());
+    SmartDashboard.putNumber("Actual Velocity", sparkEncoder.getVelocity());
+    SmartDashboard.putNumber("Calculate", pid.calculate(sparkEncoder.getPosition(), setpoint));
+    SmartDashboard.putNumber("Robot Position L", talonLeftLeader.getSelectedSensorPosition());
+    SmartDashboard.putNumber("Robot Position R", talonRightLeader.getSelectedSensorPosition());
+
+    if (SmartDashboard.getBoolean("Reset Encoder", false))
+    {
+      SmartDashboard.putBoolean("Reset Encoder", false);
+      // Reset the encoder position to 0
+      sparkEncoder.setPosition(0);
+    }
+
+    if(limit.get())
+    {
+      sparkEncoder.setPosition(0);
     }
   }
 
   public void teleopInit()
   {
+    CvSink cvSink = CameraServer.getVideo();
+    CvSource outputStream = CameraServer.putVideo("Detected", 640, 480);
+    setpoint = 0;
     m_timer.start();
     setSafety(false);
   }
 
   public void teleopPeriodic()
   {
-    drivetrain.arcadeDrive(driver.getLeftY(), driver.getRightX(), true);
-    sparkElevator.set(operator.getLeftY());
-
-    if(operator.getAButtonPressed())
+    drivetrain.arcadeDrive(-driver.getLeftY(), -driver.getRightX(), true);
+    if(operator.getLeftTriggerAxis() > 0)
     {
-      turnRollers();
+      victorRollerElevator.set(operator.getLeftTriggerAxis());
+    }
+    else if(operator.getRightTriggerAxis() > 0)
+    {
+      victorRollerElevator.set(-operator.getRightTriggerAxis());
+    }
+    sparkElevator.set(-operator.getLeftY());
+
+    if(operator.getRightBumperButton())
+    {
+      talonRollers.set(1);
+    }
+    else if(!operator.getLeftBumperButton())
+    {
+      talonRollers.set(0);
+    } 
+    
+    if(operator.getLeftBumperButton())
+    {
+      talonRollers.set(-1);
+    }
+    else if(!operator.getRightBumperButton())
+    {
+      talonRollers.set(0);
     }
 
-    if(operator.getXButtonPressed())
+    if(operator.getXButton())
     {
-      moveRollerElevator();
+      talonCoralIntake.set(0.8);
+    }
+    else if(operator.getYButton())
+    {
+      talonCoralIntake.set(0.3);
+    }
+    else
+    {
+      talonCoralIntake.set(0);
+    }
+    
+    
+    if(operator.getPOV() == 0)
+    {
+      moveBottom();
     }
 
-    if(operator.getBButtonPressed())
+    if(operator.getPOV() == 90)
     {
-      moveElevator();
+      moveMiddle();
     }
 
-    System.out.println(sparkEncoder.getPosition());
+    SmartDashboard.putNumber("LLeaderSpeed", talonLeftLeader.getMotorOutputPercent());
+    SmartDashboard.putNumber("RLeaderSpeed", talonLeftLeader.getMotorOutputPercent());
+    SmartDashboard.putNumber("LFollowSpeed", talonLeftLeader.getMotorOutputPercent());
+    SmartDashboard.putNumber("RFollowSpeed", talonLeftLeader.getMotorOutputPercent());
   }
 
   public void autonomousInit()
   {
+    go = true;
+    setpoint = 0;
     setSafety(false);
     m_timer.restart();
   }
 
   public void autonomousPeriodic()
   {
-
+    if(m_timer.get() < 5 && go == true)
+    {
+      talonRightLeader.set(0.2);
+      talonLeftLeader.set(0.2);
+    }
+    else
+    {
+      talonRightLeader.set(0);
+      talonLeftLeader.set(0);
+      if(go == true)
+      {
+        setpoint = 110;
+        if(pid.calculate(sparkEncoder.getPosition(), setpoint) > 2 || pid.calculate(sparkEncoder.getPosition(), setpoint) < -2)
+        {
+          sparkElevator.set(pid.calculate(sparkEncoder.getPosition(), setpoint));
+        }
+        else
+        {
+          sparkElevator.set(0);
+          setpoint = 0;
+          m_timer.restart();
+          go = false;
+        }
+      }
+      
+      if(m_timer.get() < 2)
+      {
+        sparkElevator.set(0);
+        talonCoralIntake.set(0.8);
+      }
+      else
+      {
+        talonCoralIntake.set(0);
+      }
+    }
   }
 
   void apriltagVisionThreadProc() {
